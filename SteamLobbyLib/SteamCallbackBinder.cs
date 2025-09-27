@@ -13,7 +13,7 @@ internal static class SteamCallbackBinder
     private static Callback<LobbyDataUpdate_t>? _onLobbyDataUpdate;
     private static Callback<LobbyChatUpdate_t>? _onLobbyChatUpdate;
 
-    public static void Bind(ILobbyEvents events, SteamLobbyManager? manager = null)
+    public static void Bind(ILobbyEvents events, SteamLobbyManager manager)
     {
         _events = events;
         _manager = manager;
@@ -25,24 +25,26 @@ internal static class SteamCallbackBinder
             {
                 var steamId = SteamMatchmaking.GetLobbyByIndex(i);
                 var lobbyId = LobbyId.FromSteamId(steamId);
-                var data = _manager?.GetLobbyData(lobbyId) ?? new LobbyData { Id = lobbyId };
+                var data = manager.GetLobbyData(lobbyId);
                 lobbies.Add(data);
             }
 
-            _events?.OnLobbyListReceived(lobbies);
+            manager.SetCachedLobbies(lobbies);
+            events.OnLobbyListReceived(lobbies);
         });
 
         _onLobbyEnter = Callback<LobbyEnter_t>.Create(result =>
         {
             var lobbyId = LobbyId.FromSteamId((CSteamID)result.m_ulSteamIDLobby);
-            _events?.OnLobbyJoined(lobbyId);
+            manager.SetCurrentLobby(lobbyId);
+            events.OnLobbyJoined(lobbyId);
         });
 
         _onLobbyDataUpdate = Callback<LobbyDataUpdate_t>.Create(result =>
         {
             if (result.m_bSuccess != 1) return;
             var lobbyId = LobbyId.FromSteamId((CSteamID)result.m_ulSteamIDLobby);
-            _events?.OnLobbyDataUpdated(lobbyId);
+            events.OnLobbyDataUpdated(lobbyId);
         });
 
         _onLobbyChatUpdate = Callback<LobbyChatUpdate_t>.Create(result =>
@@ -50,7 +52,7 @@ internal static class SteamCallbackBinder
             var lobbyId = LobbyId.FromSteamId((CSteamID)result.m_ulSteamIDLobby);
             var memberId = LobbyId.FromSteamId((CSteamID)result.m_ulSteamIDUserChanged);
             var change = (EChatMemberStateChange)result.m_rgfChatMemberStateChange;
-            _events?.OnLobbyMemberChanged(lobbyId, memberId, change);
+            events.OnLobbyMemberChanged(lobbyId, memberId, change);
         });
     }
 }

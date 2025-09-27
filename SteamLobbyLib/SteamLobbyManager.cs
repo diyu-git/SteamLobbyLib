@@ -1,28 +1,57 @@
 ﻿using System;
+using System.Collections.Generic;
 using Steamworks;
-
+using System.Text.Json;
 namespace SteamLobbyLib;
 
 public class SteamLobbyManager
 {
     private readonly ILobbyEvents _events;
-    private readonly Action<string> _log;
     private readonly bool _enableLogging;
 
-    public SteamLobbyManager(ILobbyEvents events, Action<string>? logger = null, bool enableLogging = true)
+    private LobbyId? _currentLobbyId;
+    private readonly List<LobbyData> _cachedLobbies = [];
+
+    public LobbyId? CurrentLobby => _currentLobbyId;
+    public IReadOnlyList<LobbyData> CachedLobbies => _cachedLobbies;
+    public int LobbyCount => _cachedLobbies.Count;
+
+    private readonly ITraceLogger _logger;
+
+    public SteamLobbyManager(ILobbyEvents events, ITraceLogger logger, bool enableLogging = true)
     {
         _events = events;
         _enableLogging = enableLogging;
-        _log = enableLogging ? logger ?? Console.WriteLine : _ => { };
-        SteamCallbackBinder.Bind(events);
+        _logger = logger;
+        SteamCallbackBinder.Bind(events, this);
         Log("Manager", "SteamCallbackBinder bound.");
     }
 
     public void Initialize()
     {
+        Log("Lifecycle", "Attempting SteamAPI initialization...");
+
         if (!SteamAPI.Init())
-            throw new InvalidOperationException("SteamAPI failed to initialize. Check DLL placement and architecture.");
-        Log("Lifecycle", $"Steam initialized: {SteamAPI.IsSteamRunning()}");
+        {
+            var hints = new List<string>();
+
+            if (!SteamAPI.IsSteamRunning())
+                hints.Add("Steam client is not running.");
+
+            if (!Environment.Is64BitProcess)
+                hints.Add("Process is not 64-bit. Steamworks requires x64 architecture.");
+
+            if (!SteamAPI.RestartAppIfNecessary((AppId_t)480))
+                hints.Add("App restart check failed. AppId may be incorrect or not set up properly.");
+
+            var message = "SteamAPI failed to initialize.";
+            if (hints.Count > 0)
+                message += " Possible causes:\n - " + string.Join("\n - ", hints);
+
+            throw new InvalidOperationException(message);
+        }
+
+        Log("Lifecycle", $"Steam initialized successfully. Steam running: {SteamAPI.IsSteamRunning()}");
     }
 
     public void Shutdown()
@@ -34,7 +63,7 @@ public class SteamLobbyManager
     public void Tick()
     {
         SteamAPI.RunCallbacks();
-        Log("Lifecycle", "SteamAPI callbacks ticked.");
+        //Log("Lifecycle", "SteamAPI callbacks ticked."); 
     }
 
     public void CreateLobby(int maxPlayers)
@@ -49,13 +78,31 @@ public class SteamLobbyManager
         SteamMatchmaking.JoinLobby(lobbyId.ToSteamId());
     }
 
-    public void LeaveLobby(LobbyId lobbyId)
+    public void LeaveLobby()
     {
-        Log("Lobby", $"Leaving lobby {lobbyId}");
-        SteamMatchmaking.LeaveLobby(lobbyId.ToSteamId());
+        if (_currentLobbyId == null)
+        {
+            Log("Lobby", "No active lobby to leave.");
+            return;
+        }
+
+        Log("Lobby", $"Leaving lobby {_currentLobbyId}");
+        SteamMatchmaking.LeaveLobby(_currentLobbyId.Value.ToSteamId());
+        _currentLobbyId = null;
     }
 
-    public void SetLobbyData(LobbyId lobbyId, string key, string value)
+    public void UpdateCurrentLobbyMetadata(string key, string value)
+    {
+        if (_currentLobbyId == null)
+        {
+            Log("Lobby", "No active lobby to update.");
+            return;
+        }
+
+        SetLobbyData(_currentLobbyId.Value, key, value);
+    }
+
+    private void SetLobbyData(LobbyId lobbyId, string key, string value)
     {
         Log("Lobby", $"Setting lobby data: {key} = {value} for {lobbyId}");
         SteamMatchmaking.SetLobbyData(lobbyId.ToSteamId(), key, value);
@@ -66,6 +113,13 @@ public class SteamLobbyManager
         Log("Lobby", $"Requesting lobby list (max {count})");
         SteamMatchmaking.AddRequestLobbyListResultCountFilter(count);
         SteamMatchmaking.RequestLobbyList();
+    }
+
+    public void RequestLobbyListWithFilter(string key, string value)
+    {
+        Log("Lobby", $"Requesting lobby list with filter: {key} = {value}");
+        SteamMatchmaking.AddRequestLobbyListStringFilter(key, value, ELobbyComparison.k_ELobbyComparisonEqual);
+        RequestLobbyList();
     }
 
     public LobbyData GetLobbyData(LobbyId lobbyId)
@@ -86,9 +140,61 @@ public class SteamLobbyManager
         };
     }
 
+    public void PrintCurrentLobbyMetadata()
+    {
+        if (_currentLobbyId == null)
+        {
+            Log("Lobby", "No active lobby to inspect.");
+            return;
+        }
+
+        var steamId = _currentLobbyId.Value.ToSteamId();
+        var keys = new[] {"name", "map", "mode", "version"};
+
+        foreach (var key in keys)
+        {
+            var value = SteamMatchmaking.GetLobbyData(steamId, key);
+            Log("Metadata", $"{key} = {value}");
+        }
+    }
+
+    public void SimulateMemberChange(EChatMemberStateChange change)
+    {
+        if (_currentLobbyId == null)
+        {
+            Log("Lobby", "No active lobby to simulate member change.");
+            return;
+        }
+
+        var fakeMember = LobbyId.FromSteamId(new CSteamID(123456789));
+        Log("Simulate", $"Member {fakeMember} → {change} in {_currentLobbyId}");
+        _events.OnLobbyMemberChanged(_currentLobbyId.Value, fakeMember, change);
+    }
+
+    public string ExportLobbyDataJson(LobbyId lobbyId)
+    {
+        var data = GetLobbyData(lobbyId);
+        var json = JsonSerializer.Serialize(data);
+        Log("Export", $"Lobby {lobbyId} exported as JSON.");
+        return json;
+    }
+
+    internal void SetCurrentLobby(LobbyId lobbyId)
+    {
+        _currentLobbyId = lobbyId;
+        Log("Lifecycle", $"Current lobby set to {lobbyId}");
+    }
+
+    internal void SetCachedLobbies(List<LobbyData> lobbies)
+    {
+        _cachedLobbies.Clear();
+        _cachedLobbies.AddRange(lobbies);
+        Log("Lifecycle", $"Cached {lobbies.Count} lobbies.");
+    }
+
     private void Log(string category, string message)
     {
         if (_enableLogging)
-            _log($"[{category}] {message}");
+            _logger.Log(category, message);
     }
 }

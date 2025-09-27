@@ -18,7 +18,7 @@
         <Copy SourceFiles="..\steamworks\Windows-x86\steam_api.dll"
               DestinationFolder="$(OutDir)"
               Condition="'$(Platform)' == 'x86'"/>
-        <Copy SourceFiles="..\steamworks\Windows-x64\steam_appid.txt"
+        <Copy SourceFiles="..\steamworks\steam_appid.txt"
               DestinationFolder="$(OutDir)"/>
     </Target>
 </Project>

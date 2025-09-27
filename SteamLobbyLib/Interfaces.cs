@@ -10,3 +10,8 @@ public interface ILobbyEvents
     public void OnLobbyDataUpdated(LobbyId lobbyId);
     public void OnLobbyMemberChanged(LobbyId lobbyId, LobbyId memberId, EChatMemberStateChange change);
 }
+
+public interface ITraceLogger
+{
+    void Log(string category, string message);
+}
