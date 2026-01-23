@@ -126,15 +126,17 @@ public class SteamLobbyManager
         var name = SteamMatchmaking.GetLobbyData(steamId, "name");
         var maxPlayers = SteamMatchmaking.GetLobbyMemberLimit(steamId);
         var currentPlayers = SteamMatchmaking.GetNumLobbyMembers(steamId);
+        var owner = SteamMatchmaking.GetLobbyOwner(steamId);
 
-        Log("Lobby", $"Hydrating LobbyData for {lobbyId}: name='{name}', players={currentPlayers}/{maxPlayers}");
+        Log("Lobby", $"Hydrating LobbyData for {lobbyId}: name='{name}', players={currentPlayers}/{maxPlayers}, owner={owner.m_SteamID}");
 
         return new LobbyData
         {
             Id = lobbyId,
             Name = name,
             MaxPlayers = maxPlayers,
-            CurrentPlayers = currentPlayers
+            CurrentPlayers = currentPlayers,
+            OwnerId = owner.m_SteamID
         };
     }
 

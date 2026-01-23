@@ -9,6 +9,7 @@ namespace SteamLobbyLib
         public string Name { get; set; } = string.Empty;
         public int MaxPlayers { get; set; }
         public int CurrentPlayers { get; set; }
+        public ulong OwnerId { get; set; } // Host Steam ID
     }
 }
 
