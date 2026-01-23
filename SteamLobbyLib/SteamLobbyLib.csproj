@@ -11,9 +11,9 @@
         </Reference>
     </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="System.Text.Json" Version="9.0.9" />
-    </ItemGroup>
+        <!-- Removed System.Text.Json package: ExportLobbyDataJson was unused and has been deleted.
+             This avoids bringing newer TFMs transitively into netstandard/net6 consumers.
+        -->
     <Target Name="PostBuild" AfterTargets="PostBuildEvent">
         <Copy SourceFiles="..\steamworks\Windows-x64\steam_api64.dll"
               DestinationFolder="$(OutDir)"

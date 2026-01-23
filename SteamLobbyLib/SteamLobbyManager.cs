@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using Steamworks;
-using System.Text.Json;
 namespace SteamLobbyLib;
 
 public class SteamLobbyManager
@@ -62,8 +61,7 @@ public class SteamLobbyManager
 
     public void Tick()
     {
-        SteamAPI.RunCallbacks();
-        //Log("Lifecycle", "SteamAPI callbacks ticked."); 
+    SteamAPI.RunCallbacks();
     }
 
     public void CreateLobby(int maxPlayers)
@@ -169,14 +167,6 @@ public class SteamLobbyManager
         var fakeMember = LobbyId.FromSteamId(new CSteamID(123456789));
         Log("Simulate", $"Member {fakeMember} → {change} in {_currentLobbyId}");
         _events.OnLobbyMemberChanged(_currentLobbyId.Value, fakeMember, change);
-    }
-
-    public string ExportLobbyDataJson(LobbyId lobbyId)
-    {
-        var data = GetLobbyData(lobbyId);
-        var json = JsonSerializer.Serialize(data);
-        Log("Export", $"Lobby {lobbyId} exported as JSON.");
-        return json;
     }
 
     internal void SetCurrentLobby(LobbyId lobbyId)
